@@ -784,15 +784,20 @@ function split_string_2(_string)
     local mid = math.ceil(length * 0.4)
     
     local text_output = {"", ""}
-    for i,v in ipairs(split) do
-        if string.len(text_output[1]) > mid or i > spaces then
-            text_output[2] = text_output[2] .. v .. " "
-        else
-            text_output[1] = text_output[1] .. v .. " "
+    if not string.find(_string, "[\228-\233][\128-\191][\128-\191]") then
+        for i,v in ipairs(split) do
+            if string.len(text_output[1]) > mid or i > spaces then
+                text_output[2] = text_output[2] .. v .. " "
+            else
+                text_output[1] = text_output[1] .. v .. " "
+            end
         end
+        text_output[1] = string.sub(text_output[1], 1, string.len(text_output[1])-1)
+        text_output[2] = string.sub(text_output[2], 1, string.len(text_output[2])-1)
+    else
+        text_output[1] = string.gsub(_string, '牌组', '')
+        text_output[2] = "牌组"
     end
-    text_output[1] = string.sub(text_output[1], 1, string.len(text_output[1])-1)
-    text_output[2] = string.sub(text_output[2], 1, string.len(text_output[2])-1)
     return text_output
 end
 
