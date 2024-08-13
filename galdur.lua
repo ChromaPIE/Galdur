@@ -6,7 +6,8 @@
 --- MOD_DESCRIPTION: A modification to the run setup screen to ease use.
 --- BADGE_COLOUR: 3FC7EB
 --- PRIORITY: -10000
---- VERSION: 1.01g
+--- VERSION: 1.01h
+--- DEPENDENCIES: [Steamodded>=1.0.0~ALPHA-0812d]
 
 -- Definitions
 Galdur = SMODS.current_mod
@@ -23,8 +24,7 @@ Galdur.run_setup = {
     pages = {},
     selected_deck_height = 52,
 }
-Galdur.use = true
-Galdur.animation = true
+Galdur.quick_start = {}
 Galdur.test_mode = false
 Galdur.hover_index = 0
 G.E_MANAGER.queues.galdur = {}
@@ -111,7 +111,7 @@ function Card:click()
     if self.deck_select_position and self.config.center.unlocked then
         Galdur.run_setup.selected_deck_from = self.area.config.index
         Galdur.run_setup.choices.deck = Back(self.config.center)
-        Galdur.run_setup.choices.stake = get_deck_win_galdur(Galdur.run_setup.choices.deck.effect.center, true)+1
+        Galdur.run_setup.choices.stake = get_deck_win_stake(Galdur.run_setup.choices.deck.effect.center.key)
         G.E_MANAGER:clear_queue('galdur')
         Galdur.populate_deck_preview(Galdur.run_setup.choices.deck)
 
@@ -168,17 +168,17 @@ G.FUNCS.exit_overlay_menu = function()
         G.E_MANAGER:clear_queue('galdur')
     end
     exit_overlay()
-  end
-
-local deck_win = set_deck_win
-function set_deck_win()
-    if G.GAME.selected_back and G.GAME.selected_back.effect and G.GAME.selected_back.effect.center and G.GAME.selected_back.effect.center.key then
-        local deck_key = G.GAME.selected_back.effect.center.key
-        if not G.PROFILES[G.SETTINGS.profile].Galdur_wins[deck_key] then G.PROFILES[G.SETTINGS.profile].Galdur_wins[deck_key] = {} end
-        G.PROFILES[G.SETTINGS.profile].Galdur_wins[deck_key][G.P_CENTER_POOLS.Stake[G.GAME.stake].key] = (G.PROFILES[G.SETTINGS.profile].Galdur_wins[deck_key][G.P_CENTER_POOLS.Stake[G.GAME.stake].key] or 0) + 1
-    end
-    deck_win()
 end
+
+-- local deck_win = set_deck_win
+-- function set_deck_win()
+--     if G.GAME.selected_back and G.GAME.selected_back.effect and G.GAME.selected_back.effect.center and G.GAME.selected_back.effect.center.key then
+--         local deck_key = G.GAME.selected_back.effect.center.key
+--         if not G.PROFILES[G.SETTINGS.profile].Galdur_wins[deck_key] then G.PROFILES[G.SETTINGS.profile].Galdur_wins[deck_key] = {} end
+--         G.PROFILES[G.SETTINGS.profile].Galdur_wins[deck_key][G.P_CENTER_POOLS.Stake[G.GAME.stake].key] = (G.PROFILES[G.SETTINGS.profile].Galdur_wins[deck_key][G.P_CENTER_POOLS.Stake[G.GAME.stake].key] or 0) + 1
+--     end
+--     deck_win()
+-- end
 
   -- Deck Selection Functions
 function generate_deck_card_areas()
@@ -206,7 +206,7 @@ function generate_deck_card_areas_ui()
         local row = {n = G.UIT.R, config = {colour = G.C.LIGHT}, nodes = {}}
         for j=1, 6 do
             if count > #G.P_CENTER_POOLS.Back then return end
-            table.insert(row.nodes, {n = G.UIT.O, config = {object = Galdur.run_setup.deck_select_areas[count], r = 0.1, id = "deck_select_"..count, outline_colour = G.C.YELLOW}})
+            table.insert(row.nodes, {n = G.UIT.O, config = {object = Galdur.run_setup.deck_select_areas[count], r = 0.1, id = "deck_select_"..count}})
             count = count + 1
         end
         table.insert(deck_ui_element, row)
@@ -236,8 +236,7 @@ function populate_deck_card_areas(page)
             if not Galdur.run_setup.deck_select_areas[i].cards then Galdur.run_setup.deck_select_areas[i].cards = {} end
             Galdur.run_setup.deck_select_areas[i]:emplace(card)
             if index == card_number then
-                G.sticker_card = card
-                card.sticker = get_deck_win_galdur(G.P_CENTER_POOLS.Back[count])
+                card.sticker = get_deck_win_sticker(G.P_CENTER_POOLS.Back[count])
                 card.deck_select_position = {page = page, count = i}
             end
         end
@@ -352,7 +351,7 @@ function populate_stake_card_areas(page)
         card.children.back = get_stake_sprite_in_area(count, 3.4*14/41, card)
     
         local unlocked = true
-        local save_data = G.PROFILES[G.SETTINGS.profile].Galdur_wins[Galdur.run_setup.choices.deck.effect.center.key]
+        local save_data = G.PROFILES[G.SETTINGS.profile].deck_usage[Galdur.run_setup.choices.deck.effect.center.key].wins_by_key
         for _,v in ipairs(G.P_CENTER_POOLS.Stake[count].applied_stakes) do
             if not Galdur.config.unlock_all and (not save_data or (save_data and not save_data['stake_'..v])) then
                 unlocked = false
@@ -388,22 +387,20 @@ end
 
 function create_stake_page_cycle()
     local options = {}
-    local cycle
-    
-        local total_pages = math.ceil(#G.P_CENTER_POOLS.Stake / 24)
-        for i=1, total_pages do
-            table.insert(options, localize('k_page')..' '..i..' / '..total_pages)
-        end
-        cycle = create_option_cycle({
-            options = options,
-            w = 4.5,
-            cycle_shoulders = true,
-            opt_callback = 'change_stake_page',
-            focus_args = { snap_to = true, nav = 'wide' },
-            current_option = 1,
-            colour = G.C.RED,
-            no_pips = true
-        })
+    local total_pages = math.ceil(#G.P_CENTER_POOLS.Stake / 24)
+    for i=1, total_pages do
+        table.insert(options, localize('k_page')..' '..i..' / '..total_pages)
+    end
+    local cycle = create_option_cycle({
+        options = options,
+        w = 4.5,
+        cycle_shoulders = true,
+        opt_callback = 'change_stake_page',
+        focus_args = { snap_to = true, nav = 'wide' },
+        current_option = 1,
+        colour = G.C.RED,
+        no_pips = true
+    })
     
     return {n = G.UIT.R, config = {align = "cm"}, nodes = {cycle}}
 end
@@ -415,9 +412,7 @@ end
 
 -- Main Select Functions
 function G.UIDEF.run_setup_option_new_model(type)
-    if not G.PROFILES[G.SETTINGS.profile].Galdur_wins then initial_conversion() end
-    
-    for _, args in ipairs(Galdur.pages_to_add) do
+     for _, args in ipairs(Galdur.pages_to_add) do
         if not args.definition or localize(args.name) == "ERROR" then
             sendErrorMessage(localize('gald_new_page_error'), "Galdur")
         else
@@ -435,8 +430,10 @@ function G.UIDEF.run_setup_option_new_model(type)
     Galdur.run_setup.choices.deck = Back(get_deck_from_name(G.PROFILES[G.SETTINGS.profile].MEMORY.deck))
     G.PROFILES[G.SETTINGS.profile].MEMORY.stake = G.PROFILES[G.SETTINGS.profile].MEMORY.stake or 1
     Galdur.run_setup.choices.stake = G.PROFILES[G.SETTINGS.profile].MEMORY.stake
+    Galdur.quick_start.deck = Galdur.run_setup.choices.deck
+    Galdur.quick_start.stake = G.PROFILES[G.SETTINGS.profile].MEMORY.stake
     Galdur.run_setup.choices.seed = ""
-  
+    
     
     generate_deck_card_areas()
     generate_stake_card_areas()
@@ -467,16 +464,13 @@ function G.UIDEF.run_setup_option_new_model(type)
                     {n=G.UIT.T, config={ref_table = Galdur.run_setup.pages, ref_value = 'next_button', scale = 0.4, colour = G.C.WHITE}}
                 }}}},
                 {n=G.UIT.C, config={minw = 0.5}},
-                {n = G.UIT.C, config={align='cm'}, nodes = {{n=G.UIT.R, config = {maxw = 2.5, minw = 2.5, minh = 0.8, r = 0.1, hover = true, ref_value = 1, button = 'quick_start', colour = G.C.ORANGE, align = "cm", emboss = 0.1}, nodes = {
-                    {n=G.UIT.T, config={text = '[NYI]', scale = 0.4, colour = G.C.WHITE}}
+                {n = G.UIT.C, config={align='cm'}, nodes = {{n=G.UIT.R, config = {maxw = 2.5, minw = 2.5, minh = 0.8, r = 0.1, hover = true, ref_value = 1, button = 'quick_start', colour = G.C.ORANGE, align = "cm", emboss = 0.1,
+                    tooltip = {text = {Galdur.run_setup.choices.deck:get_name(), localize({type='name_text', set='Stake', key=G.P_CENTER_POOLS.Stake[Galdur.run_setup.choices.stake].key})}} }, nodes = {
+                    {n=G.UIT.T, config={text = localize('gald_quick_start'), scale = 0.4, colour = G.C.WHITE}}
                 }}}}
             }}
         }}
     }}
-    -- if G.OVERLAY_MENU then 
-    --     local seed_toggle = G.OVERLAY_MENU:get_UIE_by_ID('run_setup_seed')
-    --     if seed_toggle then G.FUNCS.toggle_seeded_run(seed_toggle, t) end
-    -- end
     return t
 end
 
@@ -492,22 +486,7 @@ G.FUNCS.deck_select_next = function(e)
     Galdur.run_setup.current_page = math.min(math.max(Galdur.run_setup.current_page + e.config.ref_value, 1), #Galdur.run_setup.pages+1)
 
     if Galdur.run_setup.current_page > #Galdur.run_setup.pages then
-        if not Galdur.run_setup.choices.seed_select then Galdur.run_setup.choices.seed = nil end
-        G.PROFILES[G.SETTINGS.profile].MEMORY.deck = Galdur.run_setup.choices.deck.effect.center.name
-        G.PROFILES[G.SETTINGS.profile].MEMORY.stake = Galdur.run_setup.choices.stake
-        for _,page in ipairs(Galdur.run_setup.pages) do
-            if page.pre_start and type(page.pre_start) == 'function' then
-                page.pre_start(Galdur.run_setup.choices)
-            end
-        end
-
-        G.FUNCS.start_run(nil, Galdur.run_setup.choices)
-
-        for _,page in ipairs(Galdur.run_setup.pages) do
-            if page.post_start and type(page.post_start) == 'function' then
-                page.post_start(Galdur.run_setup.choices)
-            end
-        end
+        Galdur.start_run()
         return
     elseif Galdur.run_setup.current_page == #Galdur.run_setup.pages then
         Galdur.run_setup.pages.next_button = localize('gald_play')
@@ -536,8 +515,32 @@ G.FUNCS.deck_select_next = function(e)
     current_selector_page.UIBox:recalculate()
 end
 
+function Galdur.start_run(_quick_start)
+    if not Galdur.run_setup.choices.seed_select then Galdur.run_setup.choices.seed = nil end
+    if _quick_start then
+        Galdur.run_setup.choices.deck = Galdur.quick_start.deck
+        Galdur.run_setup.choices.stake = Galdur.quick_start.stake
+    end
+    G.PROFILES[G.SETTINGS.profile].MEMORY.deck = Galdur.run_setup.choices.deck.effect.center.name
+    G.PROFILES[G.SETTINGS.profile].MEMORY.stake = Galdur.run_setup.choices.stake
+    for _,page in ipairs(Galdur.run_setup.pages) do
+        if page.pre_start and type(page.pre_start) == 'function' then
+            page.pre_start(Galdur.run_setup.choices)
+        end
+    end
+
+    G.FUNCS.start_run(nil, Galdur.run_setup.choices)
+
+    for _,page in ipairs(Galdur.run_setup.pages) do
+        if page.post_start and type(page.post_start) == 'function' then
+            page.post_start(Galdur.run_setup.choices)
+        end
+    end
+end
+
 G.FUNCS.quick_start = function(e)
-    sendDebugMessage("NYI - This button doesn't do anything")
+    Galdur.spit("NYI - This button doesn't do anything")
+    Galdur.start_run(true)
 end
 
 function deck_select_page_deck()
@@ -559,7 +562,7 @@ end
 function deck_select_page_stake()
     generate_stake_card_areas()
     Galdur.generate_chip_tower()
-    Galdur.populate_chip_tower(math.min(get_deck_win_galdur(Galdur.run_setup.choices.deck.effect.center, true)+1, #G.P_CENTER_POOLS.Stake))
+    Galdur.populate_chip_tower(get_deck_win_stake(Galdur.run_setup.choices.deck.effect.center.key))
 
     Galdur.generate_deck_preview()
     Galdur.populate_deck_preview(Galdur.run_setup.choices.deck, true)
@@ -663,7 +666,7 @@ function Galdur.populate_deck_preview(_deck, silent)
         card.children.back:set_role({major = card, role_type = 'Glued', draw_major = card})
         if index == Galdur.run_setup.selected_deck_height then
             G.sticker_card = card
-            card.sticker = get_deck_win_galdur(_deck.effect.center)
+            card.sticker = get_deck_win_sticker(_deck.effect.center)
         end
         if silent or not Galdur.config.animation then
             Galdur.run_setup.selected_deck_area:emplace(card)
@@ -706,7 +709,7 @@ function Galdur.populate_chip_tower(_stake, silent)
         Galdur.run_setup.chip_tower_holding.cards = {}
     end
     if _stake == 0 then _stake = 1 end
-    local applied_stakes = order_stake_chain(build_stake_chain(_stake), _stake)
+    local applied_stakes = order_stake_chain(SMODS.build_stake_chain(G.P_CENTER_POOLS.Stake[_stake]), _stake)
     for index, stake_index in ipairs(applied_stakes) do
         local card = Card(Galdur.run_setup.chip_tower.T.x, G.ROOM.T.y, 3.4*14/41, 3.4*14/41,
             Galdur.run_setup.choices.deck.effect.center, Galdur.run_setup.choices.deck.effect.center,
@@ -746,20 +749,6 @@ function Galdur.display_chip_tower()
             }}
         }}
     }}
-end
-
-function build_stake_chain(end_stake_index, chain)
-    local stake_chain = chain or {}
-    stake_chain[end_stake_index] = end_stake_index
-    if end_stake_index > 1 then
-        local next_stakes = G.P_CENTER_POOLS.Stake[end_stake_index].applied_stakes
-        for _,v in ipairs(next_stakes) do
-            stake_chain = build_stake_chain(G.P_STAKES['stake_'..v].stake_level, stake_chain)
-        end
-        return stake_chain
-    else
-        return stake_chain
-    end
 end
 
 function order_stake_chain(stake_chain, _stake)
@@ -820,42 +809,11 @@ function create_stake_unlock_message(stake)
     }
 end
 
-function initial_conversion()
-    spit("Creating new save data")
-    delay(0.4)
-    local old_data = G.PROFILES[G.SETTINGS.profile].deck_usage
-    local new_data = {}
-    for deck_key, deck_info in pairs(old_data) do
-        new_data[deck_key] = {}
-        for index, number in pairs(deck_info.wins) do
-            new_data[deck_key][G.P_CENTER_POOLS.Stake[index].key] = number
-        end
-    end
-    G.PROFILES[G.SETTINGS.profile].Galdur_wins = new_data
-    spit("Done!")
-end
-
-function spit(message)
+function Galdur.spit(message)
     sendDebugMessage(message, "Galdur")
 end
 
 -- Function Overrides
-
-function get_deck_win_galdur(_center, raw)
-    if G.PROFILES[G.SETTINGS.profile].Galdur_wins[_center.key] then 
-        local _w = nil
-        for key, v in pairs(G.PROFILES[G.SETTINGS.profile].Galdur_wins[_center.key]) do
-            if (G.P_STAKES[key] and G.P_STAKES[key].stake_level or 0) > (_w and G.P_STAKES[_w].stake_level or 0) then
-                _w = key
-            end
-        end
-        if _w then 
-            return raw and G.P_STAKES[_w].stake_level or G.sticker_map[_w]
-        end
-    end
-    if raw then return 0 end
-end
-
 function G.FUNCS.toggle_seeded_run_galdur(bool, e)
     if not e then return end
     local current_selector_page = e.UIBox:get_UIE_by_ID('seed_input')
@@ -886,48 +844,7 @@ function G.FUNCS.toggle_button(e)
     local ref = e.config.ref_table
     ref.ref_table[ref.ref_value] = not ref.ref_table[ref.ref_value]
     if e.config.toggle_callback then 
-      e.config.toggle_callback(ref.ref_table[ref.ref_value], e) -- pass the node it's from too
-    end
-end
-
--- Stake injection changes - TODO: import into steamodded main with other stake changes
-SMODS.Stake.inject = function(self)
-    if not self.injected then
-        -- Inject stake in the correct spot
-        self.count = #G.P_CENTER_POOLS[self.set] + 1
-        self.order = self.count
-        if self.above_stake then
-            self.order = G.P_STAKES[self.class_prefix .. "_" .. self.above_stake].stake_level + 1
-        end
-        self.stake_level = self.order
-        for _, v in pairs(G.P_STAKES) do
-            if v.stake_level >= self.stake_level then
-                v.stake_level = v.stake_level + 1
-                v.order = v.stake_level
-            end
-        end
-        G.P_STAKES[self.key] = self
-        -- Sticker sprites (stake_ prefix is removed for vanilla compatiblity)
-        if self.sticker_pos ~= nil then
-            G.shared_stickers[self.key:sub(7)] = Sprite(0, 0, G.CARD_W, G.CARD_H,
-                G.ASSET_ATLAS[self.sticker_atlas] or G.ASSET_ATLAS["stickers"], self.sticker_pos)
-            G.sticker_map[self.key] = self.key:sub(7)
-        else
-            G.sticker_map[self.key] = nil
-        end
-    else
-        G.P_STAKES[self.key] = self
-    end
-    self.injected = true
-    -- should only need to do this once per injection routine
-    G.P_CENTER_POOLS[self.set] = {}
-    for _, v in pairs(G.P_STAKES) do
-        SMODS.insert_pool(G.P_CENTER_POOLS[self.set], v)
-    end
-    table.sort(G.P_CENTER_POOLS[self.set], function(a, b) return a.stake_level < b.stake_level end)
-    G.C.STAKES = {}
-    for i = 1, #G.P_CENTER_POOLS[self.set] do
-        G.C.STAKES[i] = G.P_CENTER_POOLS[self.set][i].colour or G.C.WHITE
+        e.config.toggle_callback(ref.ref_table[ref.ref_value], e) -- pass the node it's from too
     end
 end
 
@@ -936,7 +853,7 @@ if Galdur.test_mode then
     for i=1, 10 do
         SMODS.Stake({
             key = "test_"..i,
-            applied_stakes = {i==1 and 'white' or "galdur_test_"..(i-1)},
+            applied_stakes = i==1 and {} or {"galdur_test_"..(i-1)},
             above_stake = (i==1 and 'gold' or "galdur_test_"..(i-1)),
             loc_txt = {description = {
                 name = "Test Stake "..i,
@@ -964,7 +881,7 @@ if Galdur.test_mode then
 
     SMODS.Stake({
         key = "test_stake",
-        applied_stakes = {"galdur_test_10", "cry_brown"},
+        applied_stakes = {"cry_brown", "galdur_test_10"},
         above_stake = ('galdur_test_10'),
         pos = { x = 4, y = 1 },
         loc_txt = {description = {

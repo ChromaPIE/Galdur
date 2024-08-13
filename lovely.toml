@@ -1,7 +1,7 @@
 [manifest]
 version = "1.0.0"
 dump_lua = true
-priority = 1
+priority = 10
 
 # Colour stake chips in stake selector and stake chip tower
 # Card:draw()
@@ -62,23 +62,12 @@ payload = '''
 local selected_back = saveTable and saveTable.BACK.name or (args.challenge and args.challenge.deck and args.challenge.deck.type) or (args.deck and args.deck.name) or (self.GAME.viewed_back and self.GAME.viewed_back.name) or self.GAME.selected_back and self.GAME.selected_back.name or 'Red Deck'
 '''
 
-# Modify deck win save
-# set_deck_win()
-[[patches]]
-[patches.pattern]
-target = 'functions/misc_functions.lua'
-pattern = '''G.PROFILES[G.SETTINGS.profile].deck_usage[deck_key].wins[i] = (G.PROFILES[G.SETTINGS.profile].deck_usage[deck_key].wins[i] or 1)'''
-position = 'at'
-match_indent = true
-payload = '''
-'''
-
 # Cryptid compat
 # Card:draw()
 [[patches]]
 [patches.pattern]
 target = 'card.lua'
-pattern = '''local currentBack = self.params.viewed_back and G.GAME.viewed_back or G.GAME.selected_back'''
+pattern = '''local currentBack = type(self.params.viewed_back) == 'table' and self.params.viewed_back or (self.params.viewed_back and G.GAME.viewed_back or G.GAME.selected_back)'''
 position = 'at'
 match_indent = true
-payload = '''local currentBack = (Galdur.config.use and type(self.params.galdur_back) == 'table' and self.params.galdur_back) or (self.params.viewed_back and G.GAME.viewed_back or G.GAME.selected_back)'''
+payload = '''local currentBack = (Galdur.config.use and type(self.params.galdur_back) == 'table' and self.params.galdur_back) or type(self.params.viewed_back) == 'table' and self.params.viewed_back or (self.params.viewed_back and G.GAME.viewed_back or G.GAME.selected_back)'''
