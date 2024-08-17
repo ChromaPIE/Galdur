@@ -6,8 +6,8 @@
 --- MOD_DESCRIPTION: A modification to the run setup screen to ease use.
 --- BADGE_COLOUR: 3FC7EB
 --- PRIORITY: -10000
---- VERSION: 1.01h
---- DEPENDENCIES: [Steamodded>=1.0.0~ALPHA-0812d]
+--- VERSION: 1.1
+--- DEPENDENCIES: [Steamodded>=1.0.0~ALPHA-0813a]
 
 -- Definitions
 Galdur = SMODS.current_mod
@@ -56,20 +56,43 @@ function Card:hover()
             G:save_progress()
         end
 
+        local col = self.params.deck_preview and G.UIT.C or G.UIT.R
+        local info_col = self.params.deck_preview and G.UIT.R or G.UIT.C
         local back = Back(self.config.center)
 
-        self.config.h_popup = {n=G.UIT.C, config={align = "cm", minh = 1.7, r = 0.1, colour = G.C.L_BLACK, padding = 0.1, outline=1}, nodes={
-            {n=G.UIT.R, config={align = "cm", r = 0.1, minw = 3, maxw = 4, minh = 0.6}, nodes={
-              {n=G.UIT.O, config={object = UIBox{definition = {n=G.UIT.ROOT, config={align = "cm", colour = G.C.CLEAR}, nodes={
-                  {n=G.UIT.O, config={object = DynaText({string = back:get_name(),maxw = 4, colours = {G.C.WHITE}, shadow = true, bump = true, scale = 0.5, pop_in = 0, silent = true})}},
-                }},
-                config = {offset = {x=0,y=0}, align = 'cm', parent = e}
-              }}},
+        local info_queue = populate_info_queue(back)
+        local tooltips = {}
+        for _, center in pairs(info_queue) do
+            local desc = generate_card_ui(center, {main = {},info = {},type = {},name = 'done',badges = badges or {}}, nil, center.set, nil)
+            tooltips[#tooltips + 1] =
+            {n=info_col, config={align = "tm"}, nodes={
+                {n=G.UIT.R, config={align = "cm", colour = lighten(G.C.JOKER_GREY, 0.5), r = 0.1, padding = 0.05, emboss = 0.05}, nodes={
+                  info_tip_from_rows(desc.info[1], desc.info[1].name),
+                }}
+            }}
+        end
+
+
+        self.config.h_popup = {n=G.UIT.C, config={align = "cm", padding=0.1}, nodes={
+            (self.params.deck_select > 6 and {n=col, config={align='cm', padding=0.1}, nodes = tooltips} or {n=G.UIT.R}),
+            {n=col, config={align=(self.params.deck_preview and 'bm' or 'cm')}, nodes = {
+                {n=G.UIT.C, config={align = "cm", minh = 1.5, r = 0.1, colour = G.C.L_BLACK, padding = 0.1, outline=1}, nodes={
+                    {n=G.UIT.R, config={align = "cm", r = 0.1, minw = 3, maxw = 4, minh = 0.4}, nodes={
+                        {n=G.UIT.O, config={object = UIBox{definition =
+                            {n=G.UIT.ROOT, config={align = "cm", colour = G.C.CLEAR}, nodes={
+                                {n=G.UIT.O, config={object = DynaText({string = back:get_name(),maxw = 4, colours = {G.C.WHITE}, shadow = true, bump = true, scale = 0.5, pop_in = 0, silent = true})}},
+                            }},
+                        config = {offset = {x=0,y=0}, align = 'cm', parent = e}}}
+                        },
+                    }},
+                    {n=G.UIT.R, config={align = "cm", colour = G.C.WHITE, minh = 1.3, maxh = 3, minw = 3, maxw = 4, r = 0.1}, nodes={
+                        {n=G.UIT.O, config={object = UIBox{definition = back:generate_UI(), config = {offset = {x=0,y=0}}}}}
+                    }}       
+                }}
             }},
-            {n=G.UIT.R, config={align = "cm", colour = G.C.WHITE, minh = 1.5, maxh = 3, minw = 3, maxw = 4, r = 0.1}, nodes={
-                {n=G.UIT.O, config={object = UIBox{definition = back:generate_UI(), config = {offset = {x=0,y=0}}}}}
-            }}       
-          }}
+            (self.params.deck_select < 7 and {n=col, config={align=(self.params.deck_preview and 'bm' or 'cm'), padding=0.1}, nodes = tooltips} or {n=G.UIT.R})
+            
+        }}
         self.config.h_popup_config = self:align_h_popup()
 
         Node.hover(self)
@@ -112,18 +135,7 @@ function Card:click()
         Galdur.run_setup.selected_deck_from = self.area.config.index
         Galdur.run_setup.choices.deck = Back(self.config.center)
         -- Galdur.run_setup.choices.stake = get_deck_win_stake(Galdur.run_setup.choices.deck.effect.center.key)
-        G.E_MANAGER:clear_queue('galdur')
-        Galdur.populate_deck_preview(Galdur.run_setup.choices.deck)
-
-        local texts = split_string_2(Galdur.run_setup.choices.deck.loc_name)
-        local text = G.OVERLAY_MENU:get_UIE_by_ID('selected_deck_name')
-        text.config.text = texts[1]
-        text.config.scale = 0.7/math.max(1,string.len(texts[1])/8)
-        text.UIBox:recalculate()
-        text = G.OVERLAY_MENU:get_UIE_by_ID('selected_deck_name_2')
-        text.config.text = texts[2]
-        text.config.scale = 0.75/math.max(1,string.len(texts[2])/8)
-        text.UIBox:recalculate()
+        Galdur.set_new_deck()
     elseif self.params.stake_chip and not self.params.stake_chip_locked then
         Galdur.run_setup.choices.stake = self.params.stake
         G.E_MANAGER:clear_queue('galdur')
@@ -224,7 +236,7 @@ function populate_deck_card_areas(page)
         local card_number = Galdur.config.reduce and 1 or 10
         for index = 1, card_number do
             local card = Card(Galdur.run_setup.deck_select_areas[i].T.x,Galdur.run_setup.deck_select_areas[i].T.y, G.CARD_W, G.CARD_H, G.P_CENTER_POOLS.Back[count], G.P_CENTER_POOLS.Back[count],
-                {galdur_back = Back(G.P_CENTER_POOLS.Back[count]), deck_select = true})
+                {galdur_back = Back(G.P_CENTER_POOLS.Back[count]), deck_select = i})
             card.sprite_facing = 'back'
             card.facing = 'back'
             card.children.back = Sprite(card.T.x, card.T.y, card.T.w, card.T.h, G.ASSET_ATLAS[G.P_CENTER_POOLS.Back[count].atlas or 'centers'], G.P_CENTER_POOLS.Back[count].unlocked and G.P_CENTER_POOLS.Back[count].pos or {x = 4, y = 0})
@@ -242,6 +254,21 @@ function populate_deck_card_areas(page)
         end
         count = count + 1
     end
+end
+
+function Galdur.set_new_deck(silent)
+    G.E_MANAGER:clear_queue('galdur')
+    Galdur.populate_deck_preview(Galdur.run_setup.choices.deck, silent)
+
+    local texts = split_string_2(Galdur.run_setup.choices.deck.loc_name)
+    local text = G.OVERLAY_MENU:get_UIE_by_ID('selected_deck_name')
+    text.config.text = texts[1]
+    text.config.scale = 0.7/math.max(1,string.len(texts[1])/8)
+    text.UIBox:recalculate()
+    text = G.OVERLAY_MENU:get_UIE_by_ID('selected_deck_name_2')
+    text.config.text = texts[2]
+    text.config.scale = 0.75/math.max(1,string.len(texts[2])/8)
+    text.UIBox:recalculate()
 end
 
 function Galdur.clean_up_functions.clean_deck_areas()
@@ -360,7 +387,7 @@ function populate_stake_card_areas(page)
         card.children.back = get_stake_sprite_in_area(count, 3.4*14/41, card)
     
         local unlocked = true
-        local save_data = G.PROFILES[G.SETTINGS.profile].deck_usage[Galdur.run_setup.choices.deck.effect.center.key].wins_by_key
+        local save_data = G.PROFILES[G.SETTINGS.profile].deck_usage[Galdur.run_setup.choices.deck.effect.center.key]  and G.PROFILES[G.SETTINGS.profile].deck_usage[Galdur.run_setup.choices.deck.effect.center.key].wins_by_key or {}
         for _,v in ipairs(G.P_CENTER_POOLS.Stake[count].applied_stakes) do
             if not G.PROFILES[G.SETTINGS.profile].all_unlocked and not Galdur.config.unlock_all and (not save_data or (save_data and not save_data['stake_'..v])) then
                 unlocked = false
@@ -439,8 +466,9 @@ function G.UIDEF.run_setup_option_new_model(type)
     Galdur.run_setup.choices.deck = Back(get_deck_from_name(G.PROFILES[G.SETTINGS.profile].MEMORY.deck))
     G.PROFILES[G.SETTINGS.profile].MEMORY.stake = G.PROFILES[G.SETTINGS.profile].MEMORY.stake or 1
     Galdur.run_setup.choices.stake = G.PROFILES[G.SETTINGS.profile].MEMORY.stake
+    if Galdur.run_setup.choices.stake > #G.P_CENTER_POOLS.Stake then Galdur.run_setup.choices.stake = 1 end
     Galdur.quick_start.deck = Galdur.run_setup.choices.deck
-    Galdur.quick_start.stake = G.PROFILES[G.SETTINGS.profile].MEMORY.stake
+    Galdur.quick_start.stake = Galdur.run_setup.choices.stake
     Galdur.run_setup.choices.seed = ""
     
     
@@ -551,10 +579,32 @@ G.FUNCS.quick_start = function(e)
     Galdur.start_run(true)
 end
 
+G.FUNCS.random_deck = function()
+    local selected = false
+    local random
+    while not selected do
+        math.randomseed(os.time())
+        random = math.random(#G.P_CENTER_POOLS.Back)
+        if G.P_CENTER_POOLS.Back[random].unlocked then 
+            selected = true
+            play_sound('whoosh1', math.random()*0.2 + 0.9, 0.35)
+        end
+    end
+    Galdur.run_setup.choices.deck = Back(G.P_CENTER_POOLS.Back[random])
+    Galdur.set_new_deck(true)
+end
+
 function deck_select_page_deck()
     generate_deck_card_areas()
-    Galdur.generate_deck_preview()
-    Galdur.populate_deck_preview(Galdur.run_setup.choices.deck, true)
+    Galdur.include_deck_preview(true)
+
+    local deck_preview = Galdur.display_deck_preview()
+    deck_preview.nodes[#deck_preview.nodes+1] = {n = G.UIT.R, config={align = 'cm', padding = 0.15}, nodes = {
+        {n=G.UIT.R, config = {maxw = 2.5, minw = 2.5, minh = 0.8, r = 0.1, hover = true, ref_value = 1, button = 'random_deck', colour = Galdur.badge_colour, align = "cm", emboss = 0.1}, nodes = {
+            {n=G.UIT.T, config={text = "Random Deck", scale = 0.4, colour = G.C.WHITE}}
+        }}
+    }}
+
 
     return 
         {n=G.UIT.ROOT, config={align = "tm", minh = 3.8, colour = G.C.CLEAR, padding=0.1}, nodes={
@@ -562,24 +612,21 @@ function deck_select_page_deck()
                 generate_deck_card_areas_ui(), 
                 create_deck_page_cycle(),
             }},
-            Galdur.display_deck_preview()
+            deck_preview
         }}
     
 end
 
 function deck_select_page_stake()
     generate_stake_card_areas()
-    Galdur.generate_chip_tower()
     local chip_tower_options = {
         Galdur.run_setup.choices.stake,
         get_deck_win_stake(Galdur.run_setup.choices.deck.effect.center.key) + 1,
         1
     }
     Galdur.run_setup.choices.stake = chip_tower_options[Galdur.config.stake_select]
-    Galdur.populate_chip_tower(Galdur.run_setup.choices.stake)
-
-    Galdur.generate_deck_preview()
-    Galdur.populate_deck_preview(Galdur.run_setup.choices.deck, true)
+    Galdur.include_chip_tower(true)
+    Galdur.include_deck_preview()
 
     return 
     {n=G.UIT.ROOT, config={align = "tm", minh = 3.8, colour = G.C.CLEAR, padding=0.1}, nodes={
@@ -594,6 +641,17 @@ end
 
 Galdur.add_new_page = function(args)
     Galdur.pages_to_add[#Galdur.pages_to_add + 1] = args
+end
+
+Galdur.include_deck_preview = function(animate)
+    generate_deck_card_areas()
+    Galdur.generate_deck_preview()
+    Galdur.populate_deck_preview(Galdur.run_setup.choices.deck, not animate)
+end
+
+Galdur.include_chip_tower = function(animate)
+    Galdur.generate_chip_tower()
+    Galdur.populate_chip_tower(Galdur.run_setup.choices.stake, not animate)
 end
 
 Galdur.add_new_page({
@@ -648,7 +706,7 @@ function Galdur.display_deck_preview()
 
     return 
     {n=G.UIT.C, config = {align = "tm", padding = 0.15}, nodes ={
-        {n = G.UIT.C, config = {minh = 5.95, minw = 3, maxw = 3, colour = G.C.BLACK, r=0.1, align = "bm", padding = 0.15, emboss=0.05}, nodes = {
+        {n = G.UIT.R, config = {minh = 5.95, minw = 3, maxw = 3, colour = G.C.BLACK, r=0.1, align = "bm", padding = 0.15, emboss=0.05}, nodes = {
             {n = G.UIT.R, config = {align = "cm", minh = 0.6, maxw = 2.8}, nodes = {
                 {n = G.UIT.T, config = {id = "selected_deck_name", text = texts[1], scale = 0.7/math.max(1,string.len(texts[1])/8), colour = G.C.GREY}},
             }},
@@ -692,7 +750,7 @@ function Galdur.populate_deck_preview(_deck, silent)
     Galdur.run_setup.selected_deck_height = Galdur.config.reduce and 1 or _deck.effect.center.galdur_height or 52
     for index = 1, Galdur.run_setup.selected_deck_height do
         local card = Card(Galdur.run_setup.selected_deck_area.T.x+2*G.CARD_W, -2*G.CARD_H, G.CARD_W, G.CARD_H,
-            _deck.effect.center, _deck.effect.center, {galdur_back = _deck, deck_select = true})
+            _deck.effect.center, _deck.effect.center, {galdur_back = _deck, deck_select = 1, deck_preview = true})
         if Galdur.config.animation and not silent then Galdur.run_setup.selected_deck_area_holding:emplace(card) end
         card.sprite_facing = 'back'
         card.facing = 'back'
@@ -845,6 +903,17 @@ function create_stake_unlock_message(stake)
             {n=G.UIT.T, config={text = split[2], scale = 0.3, colour = G.C.UI.TEXT_DARK}}
         }}
     }
+end
+
+function populate_info_queue(deck)
+    local info_queue = {}
+    local loc_target = G.localization.descriptions['Back'][deck.effect.center.key]
+    for _, lines in ipairs(loc_target.text_parsed) do
+        for _, part in ipairs(lines) do
+            if part.control.T then info_queue[#info_queue+1] = G.P_CENTERS[part.control.T] or G.P_TAGS[part.control.T] end
+        end
+    end
+    return info_queue
 end
 
 function Galdur.spit(message)
